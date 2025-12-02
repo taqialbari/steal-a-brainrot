@@ -148,12 +148,24 @@ class FandomScraper {
       if (image.length > 0) {
         imageUrl = image.attr('src') || image.attr('data-src');
 
-        // Remove size parameters to get full resolution
+        // Validate and clean image URL
         if (imageUrl) {
-          imageUrl = imageUrl.split('/revision/')[0];
-          // Ensure full URL
-          if (imageUrl && !imageUrl.startsWith('http')) {
-            imageUrl = 'https:' + imageUrl;
+          // Skip lazy-load placeholders and data URIs
+          if (imageUrl.includes('data:image') || imageUrl.includes('base64')) {
+            imageUrl = null;
+          } else {
+            // Remove size parameters to get full resolution
+            imageUrl = imageUrl.split('/revision/')[0];
+
+            // Ensure full URL
+            if (imageUrl && !imageUrl.startsWith('http')) {
+              // Fix malformed URLs (e.g., "https:data:" should be "https://")
+              if (imageUrl.startsWith('//')) {
+                imageUrl = 'https:' + imageUrl;
+              } else {
+                imageUrl = null; // Invalid URL format
+              }
+            }
           }
         }
       }

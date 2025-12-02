@@ -40,19 +40,48 @@ const imageVariants = {
   }
 };
 
+// Rarity color mapping
+function getRarityColor(rarity) {
+  const rarityColors = {
+    'Common': 'bg-gray-500',
+    'Rare': 'bg-blue-500',
+    'Epic': 'bg-purple-500',
+    'Legendary': 'bg-yellow-500',
+    'Mythic': 'bg-red-500',
+    'Brainrot God': 'bg-pink-600',
+    'Secret': 'bg-indigo-600',
+    'OG': 'bg-green-600',
+    'Festive': 'bg-red-400',
+    'Unknown': 'bg-gray-600'
+  };
+  return rarityColors[rarity] || 'bg-purple-600';
+}
+
 export default function BrainrotCard({ brainrot, index = 0 }) {
   const [imageError, setImageError] = useState(false);
-  
+
   const imageUrl = brainrot.image_url || brainrot.imageUrl;
-  // Handle both /api/images/ and /images/ paths, and external URLs
+
+  // Validate and construct image src
   let imageSrc = null;
+  let isValidImage = false;
+
   if (imageUrl) {
-    if (imageUrl.startsWith('http')) {
+    // Skip invalid URLs (lazy-load placeholders, data URIs, etc.)
+    if (imageUrl.includes('data:image') || imageUrl.includes('base64')) {
+      isValidImage = false;
+    } else if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+      // Valid external URL
       imageSrc = imageUrl;
+      isValidImage = true;
     } else if (imageUrl.startsWith('/api/images/') || imageUrl.startsWith('/images/')) {
+      // Local image path
       imageSrc = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}${imageUrl}`;
-    } else {
-      imageSrc = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/images${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
+      isValidImage = true;
+    } else if (imageUrl.startsWith('/')) {
+      // Other local paths
+      imageSrc = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/images${imageUrl}`;
+      isValidImage = true;
     }
   }
 
@@ -67,7 +96,7 @@ export default function BrainrotCard({ brainrot, index = 0 }) {
     >
       {/* Image Container */}
       <div className="relative w-full h-48 bg-gray-700 overflow-hidden">
-        {!imageError && imageUrl ? (
+        {!imageError && isValidImage && imageSrc ? (
           <motion.div variants={imageVariants} className="w-full h-full">
             <Image
               src={imageSrc}
@@ -84,17 +113,13 @@ export default function BrainrotCard({ brainrot, index = 0 }) {
           </div>
         )}
         
-        {/* Category Badge */}
-        {brainrot.category && (
-          <motion.div
-            initial={{ opacity: 0, x: -10 }}
-            whileHover={{ opacity: 1, x: 0 }}
-            className="absolute top-2 left-2"
-          >
-            <span className="bg-purple-600 text-white px-3 py-1 rounded-full text-xs font-semibold">
-              {brainrot.category}
+        {/* Rarity Badge */}
+        {(brainrot.rarity || brainrot.category) && (
+          <div className="absolute top-2 left-2">
+            <span className={`${getRarityColor(brainrot.rarity || brainrot.category)} text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg`}>
+              {brainrot.rarity || brainrot.category}
             </span>
-          </motion.div>
+          </div>
         )}
       </div>
 
