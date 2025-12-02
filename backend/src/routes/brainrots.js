@@ -17,7 +17,8 @@ router.get(
   [
     query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
     query('offset').optional().isInt({ min: 0 }).toInt(),
-    query('category').optional().isString().trim()
+    query('category').optional().isString().trim(),
+    query('rarity').optional().isString().trim()
   ],
   async (req, res, next) => {
     try {
@@ -26,10 +27,10 @@ router.get(
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { limit = 50, offset = 0, category = null } = req.query;
-      
+      const { limit = 50, offset = 0, category = null, rarity = null } = req.query;
+
       const [brainrots, total] = await Promise.all([
-        Brainrot.findAll({ limit: parseInt(limit), offset: parseInt(offset), category }),
+        Brainrot.findAll({ limit: parseInt(limit), offset: parseInt(offset), category, rarity }),
         Brainrot.count(category)
       ]);
 
@@ -49,6 +50,32 @@ router.get(
 );
 
 /**
+ * GET /api/brainrots/categories/list
+ * Get all available categories
+ */
+router.get('/categories/list', async (req, res, next) => {
+  try {
+    const categories = await Brainrot.getCategories();
+    res.json({ data: categories });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/brainrots/rarities
+ * Get all available rarities with counts
+ */
+router.get('/rarities', async (req, res, next) => {
+  try {
+    const rarities = await Brainrot.getRarities();
+    res.json({ data: rarities });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * GET /api/brainrots/:id
  * Get a single brainrot by ID
  */
@@ -63,7 +90,7 @@ router.get(
       }
 
       const brainrot = await Brainrot.findById(parseInt(req.params.id));
-      
+
       if (!brainrot) {
         return res.status(404).json({ error: 'Brainrot not found' });
       }
@@ -74,19 +101,6 @@ router.get(
     }
   }
 );
-
-/**
- * GET /api/brainrots/categories/list
- * Get all available categories
- */
-router.get('/categories/list', async (req, res, next) => {
-  try {
-    const categories = await Brainrot.getCategories();
-    res.json({ data: categories });
-  } catch (error) {
-    next(error);
-  }
-});
 
 /**
  * POST /api/brainrots

@@ -102,6 +102,12 @@ cd backend
 npm run lint
 ```
 
+Trigger badge sync manually:
+```bash
+cd backend
+node -e "const BadgeService = require('./src/services/badgeService'); const bs = new BadgeService(); bs.syncBrainrots().then(r => console.log('Synced', r.length, 'brainrots'));"
+```
+
 ### Frontend
 
 Development server (Next.js):
@@ -150,6 +156,36 @@ Restore database:
 docker-compose exec -T postgres psql -U postgres steal_a_brainrot < backup.sql
 ```
 
+### Testing
+
+Run all tests:
+```bash
+node scripts/test-all.js
+```
+
+Run specific tests:
+```bash
+node scripts/test-api.js       # API endpoints
+node scripts/test-database.js  # Database connectivity
+node scripts/test-frontend.js  # Frontend accessibility
+node scripts/test-docker.js    # Docker services
+```
+
+Quick health check:
+```bash
+# Check if all services are healthy
+docker-compose ps
+
+# Test API is responding
+curl http://localhost:3001/health
+
+# Test frontend is accessible
+curl -I http://localhost:3000
+
+# Check database connectivity
+docker-compose exec postgres psql -U postgres -d steal_a_brainrot -c "SELECT COUNT(*) FROM brainrots;"
+```
+
 ## Project Structure
 
 ```
@@ -165,7 +201,8 @@ steal-a-brainrot/
 │   │   ├── models/                   # Data models
 │   │   │   └── Brainrot.js          # Brainrot model with DB operations
 │   │   ├── services/                 # Business logic
-│   │   │   ├── scraper.js           # Puppeteer web scraping service
+│   │   │   ├── badgeService.js      # Roblox Badges API integration (primary)
+│   │   │   ├── scraper.js           # Puppeteer web scraping service (deprecated)
 │   │   │   └── updateService.js     # Data update orchestration
 │   │   ├── cron/                     # Scheduled tasks
 │   │   │   └── scheduler.js         # Weekly update cron job
@@ -282,7 +319,24 @@ created_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 
 **Previous Approach (Deprecated):** Puppeteer scraping with generic selectors picked up wrong DOM elements, resulting in incomplete data (116 items vs 217+ actual brainrots).
 
-**Current Approach:** Roblox Badges API provides official, structured access to all game badges/collectibles.
+**Current Approach (✅ Implemented):** Roblox Badges API provides official, structured access to all game badges/collectibles.
+
+### Implementation Status
+
+**✅ Complete:**
+- BadgeService class fully implemented (backend/src/services/badgeService.js)
+- Database migration script ready (database/schema_v2.sql)
+- Rarity parsing algorithm implemented
+- Image downloading from Thumbnails API
+- Pagination handling for 217+ badges
+- Rate limiting and error handling
+
+**⏳ Pending Integration:**
+- Update updateService.js to use BadgeService instead of scraper
+- Update Brainrot model to support new schema fields
+- Run database migration
+- Add new API endpoints for rarity stats and search
+- Update frontend to display rarity information
 
 ### BadgeService Implementation (backend/src/services/badgeService.js)
 
@@ -456,16 +510,58 @@ sudo lsof -i :5432  # Database
 ```
 Kill process or change ports in docker-compose.yml
 
+## Important Implementation Notes
+
+### Current Development Phase
+
+The project is currently in **Phase 1: Badges API Integration** (in progress). The BadgeService is fully implemented and ready to use, but needs to be integrated into the existing codebase:
+
+1. **Next Steps for Integration:**
+   - Run database migration: `docker-compose exec -T postgres psql -U postgres -d steal_a_brainrot < database/schema_v2.sql`
+   - Update `backend/src/services/updateService.js` to call BadgeService instead of scraper
+   - Update `backend/src/models/Brainrot.js` to handle new fields (badge_id, rarity, metadata)
+   - Add new API endpoints in `backend/src/routes/brainrots.js` for rarity filtering
+   - Test the complete sync process
+
+2. **Testing BadgeService Directly:**
+   ```bash
+   cd backend
+   node -e "const BadgeService = require('./src/services/badgeService'); const bs = new BadgeService(); bs.fetchAllBadges().then(b => console.log('Found', b.length, 'badges'));"
+   ```
+
+3. **Expected Results After Integration:**
+   - 217+ brainrots fetched from Roblox Badges API
+   - Each brainrot will have a rarity tier (8 tiers total)
+   - Complete metadata including win rates and award counts
+   - All badge icons downloaded to `/backend/src/images/`
+
+### Code Architecture Notes
+
+**Data Flow (Current):**
+- updateService.js → scraper.js → PostgreSQL → API → Frontend
+
+**Data Flow (After Integration):**
+- updateService.js → badgeService.js → PostgreSQL → API → Frontend
+
+**Key Files to Modify:**
+- `backend/src/services/updateService.js` - Switch from scraper to badgeService
+- `backend/src/models/Brainrot.js` - Add support for badge_id, rarity, metadata fields
+- `backend/src/routes/brainrots.js` - Add rarity filtering and search endpoints
+
 ## Documentation Files
 
 - `README.md` - Project overview and quick start
 - `SETUP.md` - Detailed setup instructions
 - `QUICK_START.md` - 5-minute quick start guide
+- `SESSION_STATUS.md` - Current implementation status and next steps
 - `PDR.md` - Product Design Report with requirements
 - `PLAN.md` - Development plan with phases
 - `TASKS.md` - Detailed task breakdown
 - `TODO.md` - Actionable checklist
 - `SCRAPING_STRATEGY.md` - Web scraping implementation strategy
 - `DECISIONS.md` - Project decisions with rationale
+- `INTEGRATION_GUIDE.md` - Badges API integration guide
 - `PHASE4_SUMMARY.md` - Phase 4 completion summary
+- `PHASE5_SUMMARY.md` - Phase 5 completion summary
+- `PHASE6_SUMMARY.md` - Phase 6 completion summary
 - `docs/PAGE_ANALYSIS.md` - Roblox page structure analysis

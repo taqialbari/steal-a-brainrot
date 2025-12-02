@@ -8,22 +8,27 @@ const { query } = require('../database/connection');
 class Brainrot {
   /**
    * Get all brainrots
-   * @param {Object} options - Query options (limit, offset, category)
+   * @param {Object} options - Query options (limit, offset, category, rarity)
    * @returns {Promise<Array>}
    */
   static async findAll(options = {}) {
-    const { limit = 100, offset = 0, category = null } = options;
+    const { limit = 100, offset = 0, category = null, rarity = null } = options;
     let sql = 'SELECT * FROM brainrots WHERE 1=1';
     const params = [];
-    
+
     if (category) {
       sql += ' AND category = $' + (params.length + 1);
       params.push(category);
     }
-    
+
+    if (rarity) {
+      sql += ' AND rarity = $' + (params.length + 1);
+      params.push(rarity);
+    }
+
     sql += ' ORDER BY updated_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
     params.push(limit, offset);
-    
+
     const result = await query(sql, params);
     return result.rows;
   }
@@ -53,6 +58,19 @@ class Brainrot {
   }
 
   /**
+   * Get brainrot by badge ID
+   * @param {number} badgeId - Roblox badge ID
+   * @returns {Promise<Object|null>}
+   */
+  static async findByBadgeId(badgeId) {
+    const result = await query(
+      'SELECT * FROM brainrots WHERE badge_id = $1',
+      [badgeId]
+    );
+    return result.rows[0] || null;
+  }
+
+  /**
    * Create a new brainrot
    * @param {Object} data - Brainrot data
    * @returns {Promise<Object>}
@@ -65,15 +83,22 @@ class Brainrot {
       imageUrl,
       animationData,
       description,
-      gameId = '109983668079237'
+      gameId = '109983668079237',
+      badgeId,
+      rarity,
+      metadata,
+      dataSource = 'badges_api'
     } = data;
 
     const sql = `
-      INSERT INTO brainrots (name, category, price, image_url, animation_data, description, game_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO brainrots (
+        name, category, price, image_url, animation_data, description,
+        game_id, badge_id, rarity, metadata, data_source
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *
     `;
-    
+
     const params = [
       name,
       category,
@@ -81,7 +106,11 @@ class Brainrot {
       imageUrl,
       animationData ? JSON.stringify(animationData) : null,
       description,
-      gameId
+      gameId,
+      badgeId,
+      rarity,
+      metadata ? JSON.stringify(metadata) : null,
+      dataSource
     ];
 
     const result = await query(sql, params);
@@ -106,6 +135,15 @@ class Brainrot {
       } else if (key === 'imageUrl') {
         fields.push(`image_url = $${paramCount}`);
         values.push(data[key]);
+      } else if (key === 'badgeId') {
+        fields.push(`badge_id = $${paramCount}`);
+        values.push(data[key]);
+      } else if (key === 'dataSource') {
+        fields.push(`data_source = $${paramCount}`);
+        values.push(data[key]);
+      } else if (key === 'metadata') {
+        fields.push(`metadata = $${paramCount}`);
+        values.push(data[key] ? JSON.stringify(data[key]) : null);
       } else {
         fields.push(`${key} = $${paramCount}`);
         values.push(data[key]);
@@ -135,8 +173,17 @@ class Brainrot {
    * @returns {Promise<Object>}
    */
   static async upsert(data) {
-    const existing = await this.findByName(data.name, data.gameId || '109983668079237');
-    
+    // Try to find by badge_id first, then fall back to name
+    let existing = null;
+
+    if (data.badgeId) {
+      existing = await this.findByBadgeId(data.badgeId);
+    }
+
+    if (!existing) {
+      existing = await this.findByName(data.name, data.gameId || '109983668079237');
+    }
+
     if (existing) {
       return await this.update(existing.id, data);
     } else {
@@ -163,6 +210,17 @@ class Brainrot {
       'SELECT DISTINCT category FROM brainrots WHERE category IS NOT NULL ORDER BY category'
     );
     return result.rows.map(row => row.category);
+  }
+
+  /**
+   * Get all rarities with counts
+   * @returns {Promise<Array>}
+   */
+  static async getRarities() {
+    const result = await query(
+      'SELECT rarity, COUNT(*) as count FROM brainrots WHERE rarity IS NOT NULL GROUP BY rarity ORDER BY count DESC'
+    );
+    return result.rows;
   }
 
   /**
