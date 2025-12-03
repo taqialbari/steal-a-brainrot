@@ -8,11 +8,22 @@ const { query } = require('../database/connection');
 class Brainrot {
   /**
    * Get all brainrots
-   * @param {Object} options - Query options (limit, offset, category, rarity)
+   * @param {Object} options - Query options (limit, offset, category, rarity, rarities, priceMin, priceMax, sortBy, sortOrder)
    * @returns {Promise<Array>}
    */
   static async findAll(options = {}) {
-    const { limit = 100, offset = 0, category = null, rarity = null } = options;
+    const {
+      limit = 100,
+      offset = 0,
+      category = null,
+      rarity = null,
+      rarities = null,
+      priceMin = null,
+      priceMax = null,
+      sortBy = 'updated_at',
+      sortOrder = 'DESC'
+    } = options;
+
     let sql = 'SELECT * FROM brainrots WHERE 1=1';
     const params = [];
 
@@ -21,12 +32,39 @@ class Brainrot {
       params.push(category);
     }
 
+    // Support single rarity filter
     if (rarity) {
       sql += ' AND rarity = $' + (params.length + 1);
       params.push(rarity);
     }
 
-    sql += ' ORDER BY updated_at DESC LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
+    // Support multiple rarity filters
+    if (rarities && Array.isArray(rarities) && rarities.length > 0) {
+      const placeholders = rarities.map((_, i) => `$${params.length + i + 1}`).join(',');
+      sql += ` AND rarity IN (${placeholders})`;
+      params.push(...rarities);
+    }
+
+    // Price range filters
+    if (priceMin !== null) {
+      sql += ' AND price >= $' + (params.length + 1);
+      params.push(parseFloat(priceMin));
+    }
+
+    if (priceMax !== null) {
+      sql += ' AND price <= $' + (params.length + 1);
+      params.push(parseFloat(priceMax));
+    }
+
+    // Validate and apply sorting
+    const validSortFields = ['name', 'rarity', 'price', 'created_at', 'updated_at'];
+    const validSortOrders = ['ASC', 'DESC'];
+
+    const sortField = validSortFields.includes(sortBy) ? sortBy : 'updated_at';
+    const sortDirection = validSortOrders.includes(sortOrder.toUpperCase()) ? sortOrder.toUpperCase() : 'DESC';
+
+    sql += ` ORDER BY ${sortField} ${sortDirection}`;
+    sql += ' LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
     params.push(limit, offset);
 
     const result = await query(sql, params);

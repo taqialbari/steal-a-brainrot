@@ -10,7 +10,7 @@ const { body, param, query, validationResult } = require('express-validator');
 
 /**
  * GET /api/brainrots
- * Get all brainrots with optional filtering and pagination
+ * Get all brainrots with optional filtering, sorting, and pagination
  */
 router.get(
   '/',
@@ -18,7 +18,13 @@ router.get(
     query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
     query('offset').optional().isInt({ min: 0 }).toInt(),
     query('category').optional().isString().trim(),
-    query('rarity').optional().isString().trim()
+    query('rarity').optional().isString().trim(),
+    query('rarities').optional().isArray(),
+    query('rarities.*').optional().isString().trim(),
+    query('priceMin').optional().isFloat({ min: 0 }).toFloat(),
+    query('priceMax').optional().isFloat({ min: 0 }).toFloat(),
+    query('sortBy').optional().isIn(['name', 'rarity', 'price', 'created_at', 'updated_at']),
+    query('sortOrder').optional().isIn(['ASC', 'DESC', 'asc', 'desc'])
   ],
   async (req, res, next) => {
     try {
@@ -27,10 +33,30 @@ router.get(
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { limit = 50, offset = 0, category = null, rarity = null } = req.query;
+      const {
+        limit = 50,
+        offset = 0,
+        category = null,
+        rarity = null,
+        rarities = null,
+        priceMin = null,
+        priceMax = null,
+        sortBy = 'updated_at',
+        sortOrder = 'DESC'
+      } = req.query;
 
       const [brainrots, total] = await Promise.all([
-        Brainrot.findAll({ limit: parseInt(limit), offset: parseInt(offset), category, rarity }),
+        Brainrot.findAll({
+          limit: parseInt(limit),
+          offset: parseInt(offset),
+          category,
+          rarity,
+          rarities,
+          priceMin,
+          priceMax,
+          sortBy,
+          sortOrder: sortOrder.toUpperCase()
+        }),
         Brainrot.count(category)
       ]);
 
@@ -70,6 +96,54 @@ router.get('/rarities', async (req, res, next) => {
   try {
     const rarities = await Brainrot.getRarities();
     res.json({ data: rarities });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/brainrots/search
+ * Search brainrots by name or description
+ */
+router.get('/search', [
+  query('q').notEmpty().trim().isLength({ min: 1, max: 100 }),
+  query('rarity').optional().isString().trim(),
+  query('limit').optional().isInt({ min: 1, max: 100 }).toInt()
+], async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { q, rarity = null, limit = 50 } = req.query;
+
+    // Build search query
+    let sql = `
+      SELECT * FROM brainrots
+      WHERE (
+        LOWER(name) LIKE LOWER($1) OR
+        LOWER(description) LIKE LOWER($1)
+      )
+    `;
+    const params = [`%${q}%`];
+
+    if (rarity) {
+      sql += ' AND rarity = $2';
+      params.push(rarity);
+    }
+
+    sql += ' ORDER BY name ASC LIMIT $' + (params.length + 1);
+    params.push(parseInt(limit));
+
+    const { query: dbQuery } = require('../database/connection');
+    const result = await dbQuery(sql, params);
+
+    res.json({
+      data: result.rows,
+      query: q,
+      count: result.rows.length
+    });
   } catch (error) {
     next(error);
   }

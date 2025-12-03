@@ -71,20 +71,56 @@ class FandomScraper {
       if (link && name && !seen.has(name)) {
         // Skip these types of links
         const skipPatterns = [
+          // System pages
           /^\/wiki\/File:/i,
           /^\/wiki\/Category:/i,
           /^\/wiki\/Special:/i,
           /^\/wiki\/Template:/i,
           /^\/wiki\/User:/i,
           /^\/wiki\/Talk:/i,
+          /^\/wiki\/Help:/i,
+          /^\/wiki\/MediaWiki:/i,
+
+          // Gallery and metadata pages
           /\/Gallery$/i,
-          /^\/wiki\/(Rebirth|Events|Traits|Mutations|Lucky_Block|Machine|Trader|Dealer|Fuse|Ritual|Fishing|Upcoming)$/i,
-          /^\/wiki\/(Steal_a_Brainrot|List_of_Brainrots|Brainrots)$/i
+          /\?action=/i,
+          /\?oldid=/i,
+
+          // Game system pages (not individual brainrots)
+          /^\/wiki\/(Rebirth|Events|Traits|Mutations|Codes|Updates|Changelog)$/i,
+          /^\/wiki\/.*(Lucky_Block|Machine|Trader|Dealer|Fuse|Ritual|Fishing|Upcoming)$/i,
+
+          // Wiki meta pages
+          /^\/wiki\/(Steal_a_Brainrot|List_of_Brainrots|Brainrots)$/i,
+          /^\/wiki\/Steal_a_Brainrot_Wiki/i,
+          /Approved_Templates/i,
+
+          // Family/category pages (these group brainrots, aren't individual ones)
+          /_Family$/i,
+
+          // Action pages
+          /^(History|Purge|Edit|Discussion|Random)$/i,
+
+          // Wiki navigation pages
+          /^(Index|Sitemap|Navigation|Contents|Search)$/i,
+          /Local_Sitemap/i,
+
+          // Single word generic terms (likely category pages)
+          /^\/wiki\/(Secret|Exclusive|OG|Admin|Taco|Halloween|Babies|Witch)$/i,
+          /Lucky_Blocks$/i, // Category page, not individual brainrot
+
+          // People/creators
+          /SpyderSammy/i,
+          /BRAZILIAN_SPYDER/i
         ];
 
-        const shouldSkip = skipPatterns.some(pattern => pattern.test(link));
+        const shouldSkip = skipPatterns.some(pattern => pattern.test(link)) ||
+                           skipPatterns.some(pattern => pattern.test(name));
 
-        if (!shouldSkip && name.length > 1 && name.length < 100) {
+        // Additional check: skip if name is just a number (like "25", "67")
+        const isJustNumber = /^\d+$/.test(name.trim());
+
+        if (!shouldSkip && !isJustNumber && name.length > 1 && name.length < 100) {
           seen.add(name);
           const pageName = link.replace('/wiki/', '');
 

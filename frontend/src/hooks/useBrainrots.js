@@ -19,15 +19,25 @@ export function useBrainrots(filters = {}) {
       try {
         setLoading(true);
         setError(null);
-        
+
         const params = {
-          limit: filters.limit || 50,
+          limit: filters.limit || 100,
           offset: filters.offset || 0,
-          ...(filters.category && { category: filters.category })
+          ...(filters.category && { category: filters.category }),
+          ...(filters.rarity && { rarity: filters.rarity }),
+          ...(filters.rarities && filters.rarities.length > 0 && { rarities: filters.rarities }),
+          ...(filters.priceMin !== null && filters.priceMin !== undefined && { priceMin: filters.priceMin }),
+          ...(filters.priceMax !== null && filters.priceMax !== undefined && { priceMax: filters.priceMax }),
+          ...(filters.sortBy && { sortBy: filters.sortBy }),
+          ...(filters.sortOrder && { sortOrder: filters.sortOrder }),
+          ...(filters.search && { q: filters.search })
         };
 
-        const response = await apiClient.getBrainrots(params);
-        
+        // Use search endpoint if search query is present
+        const response = filters.search
+          ? await apiClient.searchBrainrots(params)
+          : await apiClient.getBrainrots(params);
+
         setBrainrots(response.data || []);
         setPagination(response.pagination || null);
       } catch (err) {
@@ -39,7 +49,18 @@ export function useBrainrots(filters = {}) {
     }
 
     fetchBrainrots();
-  }, [filters.limit, filters.offset, filters.category]);
+  }, [
+    filters.limit,
+    filters.offset,
+    filters.category,
+    filters.rarity,
+    JSON.stringify(filters.rarities), // Stringify array for dependency comparison
+    filters.priceMin,
+    filters.priceMax,
+    filters.sortBy,
+    filters.sortOrder,
+    filters.search
+  ]);
 
   return { brainrots, loading, error, pagination };
 }

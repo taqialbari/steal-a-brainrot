@@ -4,32 +4,61 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Steal a Brainrot** is a web application that displays brainrot collectibles from the Roblox game "Steal a Brainrot" (Game ID: 109983668079237, Universe ID: 7709344486). The application uses Roblox's official Badges API to fetch all 217+ brainrot items with complete metadata, stores them in PostgreSQL, and displays them in a modern Next.js frontend with animations and rarity-based visual design.
+**Steal a Brainrot** is a web application that displays brainrot collectibles from the Roblox game "Steal a Brainrot" (Game ID: 109983668079237). The application scrapes data from the Steal a Brainrot Fandom Wiki to fetch all brainrot items with details (currently 299), stores them in PostgreSQL, and displays them in a modern Next.js frontend with search, filters, statistics, detail modals, and rarity-based visual design.
 
 ## Architecture
 
 ### Three-Tier Architecture
-- **Frontend**: Next.js 14+ with React, Framer Motion for animations, Tailwind CSS for styling, rarity-based visual design
-- **Backend**: Node.js/Express.js REST API with Roblox Badges API integration (replaced broken Puppeteer scraper)
-- **Database**: PostgreSQL with enhanced schema (badge_id, rarity, metadata JSONB, data_source tracking)
-- **Automation**: node-cron scheduler for weekly badge sync (Sundays at 2 AM)
+- **Frontend**: Next.js 14+ with React, Framer Motion for animations, Tailwind CSS for styling, rarity-based visual design, search & filter UI
+- **Backend**: Node.js/Express.js REST API with Fandom Wiki scraper (Cheerio-based)
+- **Database**: PostgreSQL with enhanced schema (rarity, metadata JSONB, data_source tracking)
+- **Automation**: node-cron scheduler for weekly data sync (Sundays at 2 AM)
 
 ### Data Flow
-1. BadgeService fetches all badges from Roblox Badges API (`https://badges.roblox.com/v1/universes/7709344486/badges`)
-2. Pagination handles 217+ badges across multiple API pages
-3. Badge icons downloaded from Thumbnails API and stored locally in `/backend/src/images/`
-4. Rarity determined from win rate statistics (lower win rate = rarer)
-5. Data stored in PostgreSQL with metadata (awardedCount, winRate, etc.)
-6. Frontend fetches data via enhanced REST API with search/filter capabilities
-7. Weekly cron job automatically syncs latest badge data
+1. FandomScraper fetches all brainrots from Steal a Brainrot Fandom Wiki (`https://stealabrainrot.fandom.com/wiki/Brainrots`)
+2. Parses 280+ brainrot pages with 1-second rate limiting (respectful scraping)
+3. Images downloaded from wiki and stored locally in `/backend/src/images/`
+4. Rarity extracted from wiki infoboxes (12 tiers: Common, Rare, Epic, Legendary, Mythic, Brainrot God, Secret, OG, Admin, Taco, Festive, and special cases)
+5. Data stored in PostgreSQL (currently 299 brainrots - count varies as wiki is updated)
+6. Frontend fetches data via REST API with search/filter/stats capabilities
+7. Weekly cron job automatically syncs latest brainrot data
 
 ### Key Design Decisions
-- **Data Source**: Roblox Badges API (official, authoritative source) - NOT web scraping
-- **Why Badges API**: Steal a Brainrot uses Roblox badge system for collectibles; API provides complete metadata
-- **Rarity System**: 8 tiers (Common, Rare, Epic, Legendary, Mythic, Brainrot God, Secret, OG) based on win rate percentages
+- **Data Source**: Fandom Wiki scraping (official wiki, most complete data) - Pivoted from Roblox Badges API which returned empty
+- **Why Fandom Wiki**: Comprehensive brainrot database with names, rarities, prices, images, and descriptions
+- **Rarity System**: 12 tiers discovered from wiki data (Secret is most common with ~111 brainrots, Taco/Festive are rarest with 1 each)
+- **Rarity Color Coding**: Each rarity has distinct Tailwind color class:
+  - Common: `text-gray-400` / `border-gray-400`
+  - Rare: `text-blue-400` / `border-blue-400`
+  - Epic: `text-purple-500` / `border-purple-500`
+  - Legendary: `text-yellow-400` / `border-yellow-400`
+  - Mythic: `text-red-500` / `border-red-500`
+  - Brainrot God: `text-pink-500` / `border-pink-500`
+  - Secret: `text-cyan-400` / `border-cyan-400`
+  - OG: `text-orange-500` / `border-orange-500`
+  - Admin: `text-indigo-600` / `border-indigo-600`
+  - Taco: `text-amber-600` / `border-amber-600`
+  - Festive: `text-green-500` / `border-green-500`
+  - Default/Unknown: `text-gray-500` / `border-gray-500`
 - **Animation Format**: CSS/JavaScript animations using Framer Motion with rarity-specific effects
 - **Deployment**: Docker-based with docker-compose for local WSL2 environment
-- **Update Strategy**: Weekly automated badge sync, manual trigger available via admin endpoint
+- **Update Strategy**: Weekly automated sync, manual trigger available, 1-second rate limiting for respectful scraping
+
+## Current Development Phase
+
+**Active Phase:** Phase 7 - UI/UX Polish & Advanced Features
+
+**Current Status:**
+- Phase 7 Task 7.1 (Detail Modal) ✅ COMPLETE
+- Phase 7 Task 7.2 (Advanced Filtering) ⏳ NEXT UP
+- See `PHASE7_PLAN.md` for complete roadmap
+- See `SESSION_STATUS.md` for latest status
+
+**Next Priorities:**
+1. Advanced filtering & sorting (sortBy, multi-rarity, price range)
+2. Performance optimization (image lazy loading, bundle optimization)
+3. Testing suite (>80% coverage target)
+4. Accessibility improvements (WCAG AA compliance)
 
 ## Development Commands
 
@@ -102,10 +131,16 @@ cd backend
 npm run lint
 ```
 
-Trigger badge sync manually:
+Trigger Fandom Wiki sync manually:
 ```bash
 cd backend
-node -e "const BadgeService = require('./src/services/badgeService'); const bs = new BadgeService(); bs.syncBrainrots().then(r => console.log('Synced', r.length, 'brainrots'));"
+node -e "const UpdateService = require('./src/services/updateService'); const us = new UpdateService(); us.updateBrainrots().then(r => console.log('Synced', r.count, 'brainrots'));"
+```
+
+Test Fandom scraper:
+```bash
+cd backend
+node -e "const FandomScraper = require('./src/services/fandomScraper'); const fs = new FandomScraper(); fs.parseMainListPage().then(list => console.log('Found', list.length, 'brainrot pages'));"
 ```
 
 ### Frontend
@@ -201,7 +236,8 @@ steal-a-brainrot/
 │   │   ├── models/                   # Data models
 │   │   │   └── Brainrot.js          # Brainrot model with DB operations
 │   │   ├── services/                 # Business logic
-│   │   │   ├── badgeService.js      # Roblox Badges API integration (primary)
+│   │   │   ├── fandomScraper.js     # Fandom Wiki scraping service (primary)
+│   │   │   ├── badgeService.js      # Roblox Badges API integration (deprecated - returns empty)
 │   │   │   ├── scraper.js           # Puppeteer web scraping service (deprecated)
 │   │   │   └── updateService.js     # Data update orchestration
 │   │   ├── cron/                     # Scheduled tasks
@@ -223,8 +259,12 @@ steal-a-brainrot/
 │   │   ├── components/              # React components
 │   │   │   ├── Header.js           # Page header
 │   │   │   ├── Footer.js           # Page footer
+│   │   │   ├── BrainrotCard.js     # Individual brainrot card with animations
 │   │   │   ├── BrainrotGrid.js     # Grid display of brainrots
-│   │   │   ├── CategoryFilter.js   # Category filter component
+│   │   │   ├── BrainrotModal.js    # Detail modal with keyboard navigation (Phase 7)
+│   │   │   ├── SearchAndFilter.js  # Search bar and rarity filter
+│   │   │   ├── Stats.js            # Collection statistics display
+│   │   │   ├── CategoryFilter.js   # Category filter component (deprecated)
 │   │   │   ├── Loading.js          # Loading state component
 │   │   │   └── Error.js            # Error state component
 │   │   ├── hooks/                   # Custom React hooks
@@ -248,20 +288,25 @@ steal-a-brainrot/
   - Returns: `{ data: [], pagination: { total, limit, offset, hasMore } }`
 - `GET /api/brainrots/:id` - Get single brainrot by ID
 - `GET /api/brainrots/categories/list` - Get all categories (legacy)
-- `GET /api/brainrots/rarities` - Get rarity counts and statistics (NEW)
-- `GET /api/brainrots/search?q={query}&rarity={rarity}` - Full-text search (PLANNED)
-- `GET /api/brainrots/stats` - Overall statistics dashboard (PLANNED)
+- `GET /api/brainrots/rarities` - Get rarity counts and statistics ✅ IMPLEMENTED
+  - Returns: `{ data: [{ rarity: "Secret", count: "111" }, ...] }`
+- `GET /api/brainrots/search?q={query}&rarity={rarity}&limit={limit}` - Full-text search ✅ IMPLEMENTED
+  - Searches in name and description fields
+  - Optional rarity filter
+  - Returns: `{ data: [], query: "search term", count: 5 }`
 - `POST /api/brainrots` - Create brainrot (development/admin only)
 - `PUT /api/brainrots/:id` - Update brainrot (development/admin only)
 - `DELETE /api/brainrots/:id` - Delete brainrot (development/admin only)
 
 ### Admin
-- `POST /api/admin/sync` - Trigger manual badge sync from Roblox API (PLANNED)
-- `GET /api/admin/sync-status` - Get last sync details (PLANNED)
-- `POST /api/admin/update` - Legacy scraper trigger (deprecated, use /sync)
+- `POST /api/admin/update` - Trigger manual Fandom Wiki sync
+  - Scrapes all 280+ brainrot pages from Fandom Wiki
+  - Takes ~5-6 minutes with 1-second rate limiting
+  - Returns: `{ success: true, count: 289, results: { created, updated, errors } }`
 
 ### Health
 - `GET /health` - Health check endpoint
+  - Returns: `{ status: "ok", timestamp, service: "steal-a-brainrot-backend" }`
 
 ## Database Schema
 
@@ -313,65 +358,47 @@ description    TEXT
 created_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 ```
 
-## Data Collection Strategy: Roblox Badges API
+## Data Collection Strategy: Fandom Wiki Scraping
 
-### Why Badges API Instead of Web Scraping?
+### Current Implementation (✅ Active)
 
-**Previous Approach (Deprecated):** Puppeteer scraping with generic selectors picked up wrong DOM elements, resulting in incomplete data (116 items vs 217+ actual brainrots).
+**Data Source:** Steal a Brainrot Fandom Wiki (`https://stealabrainrot.fandom.com/wiki/Brainrots`)
 
-**Current Approach (✅ Implemented):** Roblox Badges API provides official, structured access to all game badges/collectibles.
+**Why Fandom Wiki:**
+- Most comprehensive and up-to-date brainrot database (289 items)
+- Contains complete information: names, rarities, prices, images, descriptions
+- Well-structured HTML with consistent infobox format
+- Roblox Badges API returned empty results (game uses badges differently)
 
-### Implementation Status
-
-**✅ Complete:**
-- BadgeService class fully implemented (backend/src/services/badgeService.js)
-- Database migration script ready (database/schema_v2.sql)
-- Rarity parsing algorithm implemented
-- Image downloading from Thumbnails API
-- Pagination handling for 217+ badges
-- Rate limiting and error handling
-
-**⏳ Pending Integration:**
-- Update updateService.js to use BadgeService instead of scraper
-- Update Brainrot model to support new schema fields
-- Run database migration
-- Add new API endpoints for rarity stats and search
-- Update frontend to display rarity information
-
-### BadgeService Implementation (backend/src/services/badgeService.js)
-
-**Key Discovery:** Steal a Brainrot uses Roblox's badge system to represent collectible brainrots.
-
-**API Endpoints:**
-- Badges: `https://badges.roblox.com/v1/universes/7709344486/badges`
-- Thumbnails: `https://thumbnails.roblox.com/v1/badges/icons`
+### FandomScraper Implementation (backend/src/services/fandomScraper.js)
 
 **Implementation Flow:**
-1. `fetchAllBadges()` - Paginate through all badges (100 per page)
-2. `fetchBadgeIcon(badgeId)` - Get icon URL from Thumbnails API
-3. `parseRarity(badge)` - Determine rarity from win rate statistics
-4. `downloadImage(url, name, id)` - Save icon locally with unique filename
-5. `syncBrainrots()` - Orchestrate complete sync process
+1. `parseMainListPage()` - Fetch main brainrots list page to get all brainrot page URLs
+2. `parseBrainrotPage(pageName)` - Parse individual brainrot pages for detailed data
+3. `extractFromInfobox($)` - Extract structured data from wiki infoboxes
+4. `downloadImage(url, name)` - Download and save images locally
+5. `scrapeAllBrainrots()` - Orchestrate complete scraping process with rate limiting
 
-**Rarity Detection Algorithm:**
-```javascript
-function parseRarity(winRate) {
-  if (winRate >= 20) return 'Common';      // Top 20%
-  if (winRate >= 10) return 'Rare';        // 10-20%
-  if (winRate >= 5) return 'Epic';         // 5-10%
-  if (winRate >= 2) return 'Legendary';    // 2-5%
-  if (winRate >= 0.5) return 'Mythic';     // 0.5-2%
-  if (winRate >= 0.1) return 'Brainrot God'; // 0.1-0.5%
-  return 'Secret';                          // <0.1%
-}
-```
+**Rarity Extraction:**
+- Rarities are extracted directly from wiki infoboxes
+- 11 tiers identified: Common, Rare, Epic, Legendary, Mythic, Brainrot God, Secret, OG, Admin, Taco, Festive
+- Distribution: Secret (111), Common (51), Rare (35), Epic (29), Legendary (22), etc.
 
-### Rate Limiting & Best Practices
-- 100ms delay between API requests (`BADGE_API_DELAY`)
-- Proper User-Agent header identification
-- Exponential backoff for retries (planned)
-- Response caching (planned)
-- Weekly update frequency sufficient for badge data
+**Rate Limiting & Best Practices:**
+- **CRITICAL:** 1-second delay between page requests (`requestDelay` in fandomScraper.js)
+  - Never reduce below 1 second to avoid overwhelming the wiki server
+  - Complete sync takes ~5-6 minutes for 280+ pages - this is intentional and respectful
+- Proper User-Agent header identification: "steal-a-brainrot-scraper"
+- Timeout handling (10 seconds per request)
+- Error handling with detailed logging and graceful degradation
+- Respectful scraping practices compliant with wiki terms
+- Manual sync command: `POST /api/admin/update` (use sparingly, not during development testing)
+
+### Historical Context (Deprecated Approaches)
+
+**Puppeteer Scraping (Deprecated):** Generic selectors picked up wrong DOM elements, incomplete data
+
+**Roblox Badges API (Deprecated):** Attempted integration but API returned empty results for this game
 
 ## Environment Variables
 
@@ -437,16 +464,20 @@ await runUpdateNow();
 
 ### Adding a New Frontend Component
 1. Create component in `frontend/src/components/`
-2. Use Framer Motion for animations
+2. Use Framer Motion for animations (see BrainrotModal.js for reference)
 3. Follow Tailwind CSS utility-first approach
-4. Ensure responsive design (mobile, tablet, desktop)
-5. Import and use in page components
+4. Use rarity color mapping (see Key Design Decisions section for color classes)
+5. Ensure responsive design (mobile, tablet, desktop)
+6. Add keyboard navigation where appropriate (ESC to close, arrows for navigation)
+7. Include ARIA labels for accessibility
+8. Import and use in page components
 
 ### Modifying Scraping Logic
-1. Update selectors in `backend/src/services/scraper.js`
-2. Test with `npm run test:integration` or manually trigger via admin endpoint
-3. Monitor console logs for extraction success rate
-4. Update error handling for page structure changes
+1. Update parsing logic in `backend/src/services/fandomScraper.js`
+2. Key methods: `extractFromInfobox($)` for data extraction, `parseMainListPage()` for page list
+3. Test with manual scraper command or trigger via `POST /api/admin/update`
+4. Monitor console logs for extraction success rate (should see progress for 280+ pages)
+5. Update error handling if wiki structure changes
 
 ### Database Schema Changes
 1. Update `database/schema.sql`
@@ -454,6 +485,89 @@ await runUpdateNow();
 3. Run migration: `npm run migrate` (backend)
 4. Update model in `backend/src/models/Brainrot.js`
 5. Restart services
+
+## Important Implementation Patterns
+
+### Rarity Color Mapping
+When working with rarity colors in components, use this helper function pattern (see BrainrotCard.js and BrainrotModal.js):
+
+```javascript
+const getRarityColor = (rarity) => {
+  const colors = {
+    'Common': 'text-gray-400 border-gray-400',
+    'Rare': 'text-blue-400 border-blue-400',
+    'Epic': 'text-purple-500 border-purple-500',
+    'Legendary': 'text-yellow-400 border-yellow-400',
+    'Mythic': 'text-red-500 border-red-500',
+    'Brainrot God': 'text-pink-500 border-pink-500',
+    'Secret': 'text-cyan-400 border-cyan-400',
+    'OG': 'text-orange-500 border-orange-500',
+    'Admin': 'text-indigo-600 border-indigo-600',
+    'Taco': 'text-amber-600 border-amber-600',
+    'Festive': 'text-green-500 border-green-500',
+  };
+  return colors[rarity] || 'text-gray-500 border-gray-500';
+};
+```
+
+### Modal Navigation Pattern
+For implementing navigation between items in modals or galleries, use this circular navigation pattern:
+
+```javascript
+// Navigate to next/previous item with circular wrapping
+const handleNext = () => {
+  const currentIndex = allItems.findIndex(item => item.id === selectedItem.id);
+  const nextIndex = (currentIndex + 1) % allItems.length; // Wraps to 0 after last
+  setSelectedItem(allItems[nextIndex]);
+};
+
+const handlePrevious = () => {
+  const currentIndex = allItems.findIndex(item => item.id === selectedItem.id);
+  const prevIndex = (currentIndex - 1 + allItems.length) % allItems.length; // Wraps to last from 0
+  setSelectedItem(allItems[prevIndex]);
+};
+
+// Keyboard event handling
+useEffect(() => {
+  const handleKeyDown = (e) => {
+    if (e.key === 'Escape') onClose();
+    if (e.key === 'ArrowRight') handleNext();
+    if (e.key === 'ArrowLeft') handlePrevious();
+  };
+  if (isOpen) {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }
+}, [isOpen, selectedItem]);
+```
+
+### Image Handling Pattern
+Images from Fandom Wiki may have CORS issues or be missing. Always include fallback:
+
+```javascript
+<img
+  src={imageUrl || '/placeholder-brainrot.png'}
+  alt={name}
+  onError={(e) => { e.target.src = '/placeholder-brainrot.png'; }}
+/>
+```
+
+### API Response Caching
+The useBrainrots hook manages data fetching. When adding filters/search, preserve the existing data while fetching:
+
+```javascript
+const [brainrots, setBrainrots] = useState([]);
+const [loading, setLoading] = useState(true);
+
+// Don't clear brainrots immediately when filtering - show stale data while loading
+const fetchBrainrots = async (filters) => {
+  setLoading(true);
+  // Keep existing brainrots displayed
+  const data = await api.getBrainrots(filters);
+  setBrainrots(data);
+  setLoading(false);
+};
+```
 
 ## Important Notes
 
@@ -464,11 +578,12 @@ await runUpdateNow();
 - No authentication yet (planned for future)
 
 ### Scraping Legal Compliance
-- Respect Roblox Terms of Service
-- Rate limiting implemented (3-second delays)
+- Respect Fandom Wiki Terms of Service and robots.txt
+- Rate limiting implemented (1-second delays between requests)
 - Proper User-Agent identification
 - Weekly update frequency to minimize server load
 - No aggressive scraping or DoS patterns
+- Educational/research purpose clearly identified
 
 ### Image Handling
 - Images downloaded and stored locally in Docker volume
@@ -484,11 +599,12 @@ await runUpdateNow();
 
 ## Troubleshooting
 
-### Puppeteer Fails in Docker
-- Ensure `--no-sandbox` flag is set
-- Check Chromium dependencies in Dockerfile
-- Verify `PUPPETEER_EXECUTABLE_PATH` environment variable
-- Increase `SCRAPING_TIMEOUT_MS` if network is slow
+### Scraping Issues
+- Check network connectivity to `stealabrainrot.fandom.com`
+- Verify rate limiting delay (1 second between requests)
+- If wiki structure changes, update selectors in `fandomScraper.js`
+- Check console logs for detailed error messages during scraping
+- Ensure images directory is writable: `/backend/src/images/`
 
 ### Database Connection Fails
 - Verify PostgreSQL container is running: `docker-compose ps postgres`
@@ -510,58 +626,81 @@ sudo lsof -i :5432  # Database
 ```
 Kill process or change ports in docker-compose.yml
 
-## Important Implementation Notes
+## Implementation Status
 
-### Current Development Phase
+### Current State (✅ Production Ready - Phase 7 In Progress)
 
-The project is currently in **Phase 1: Badges API Integration** (in progress). The BadgeService is fully implemented and ready to use, but needs to be integrated into the existing codebase:
+The application is **fully functional** with Fandom Wiki scraping implementation:
 
-1. **Next Steps for Integration:**
-   - Run database migration: `docker-compose exec -T postgres psql -U postgres -d steal_a_brainrot < database/schema_v2.sql`
-   - Update `backend/src/services/updateService.js` to call BadgeService instead of scraper
-   - Update `backend/src/models/Brainrot.js` to handle new fields (badge_id, rarity, metadata)
-   - Add new API endpoints in `backend/src/routes/brainrots.js` for rarity filtering
-   - Test the complete sync process
+**✅ Completed Features (Phases 1-6):**
+- FandomScraper successfully fetches all brainrots from wiki (currently 299)
+- Full-text search functionality across name and description fields
+- Rarity filtering with 12 tier system
+- Statistics dashboard showing rarity distribution
+- Responsive frontend with search, filter, and stats UI
+- Automated weekly sync via cron job
+- Docker-based deployment with hot-reload in development
+- Images downloaded and served locally
 
-2. **Testing BadgeService Directly:**
-   ```bash
-   cd backend
-   node -e "const BadgeService = require('./src/services/badgeService'); const bs = new BadgeService(); bs.fetchAllBadges().then(b => console.log('Found', b.length, 'badges'));"
-   ```
+**✅ Phase 7 Features Completed:**
+- Detail modal with keyboard navigation (ESC, ← →)
+- Share functionality (Web Share API + clipboard fallback)
+- Next/Previous brainrot navigation within modal
+- Smooth Framer Motion animations
 
-3. **Expected Results After Integration:**
-   - 217+ brainrots fetched from Roblox Badges API
-   - Each brainrot will have a rarity tier (8 tiers total)
-   - Complete metadata including win rates and award counts
-   - All badge icons downloaded to `/backend/src/images/`
+**⏳ Phase 7 In Progress:**
+- Advanced filtering & sorting (next priority)
+- Performance optimization
+- Comprehensive testing suite
+- Accessibility improvements
 
-### Code Architecture Notes
+**Current Architecture:**
+```
+FandomScraper → PostgreSQL → REST API → Next.js Frontend
+     ↓                           ↓
+  Images/       →    Express Static Middleware
+```
 
-**Data Flow (Current):**
-- updateService.js → scraper.js → PostgreSQL → API → Frontend
+### Testing the Scraper
 
-**Data Flow (After Integration):**
-- updateService.js → badgeService.js → PostgreSQL → API → Frontend
+Test FandomScraper directly:
+```bash
+cd backend
+node -e "const FandomScraper = require('./src/services/fandomScraper'); const fs = new FandomScraper(); fs.parseMainListPage().then(list => console.log('Found', list.length, 'brainrot pages'));"
+```
 
-**Key Files to Modify:**
-- `backend/src/services/updateService.js` - Switch from scraper to badgeService
-- `backend/src/models/Brainrot.js` - Add support for badge_id, rarity, metadata fields
-- `backend/src/routes/brainrots.js` - Add rarity filtering and search endpoints
+Trigger manual sync:
+```bash
+cd backend
+node -e "const UpdateService = require('./src/services/updateService'); const us = new UpdateService(); us.updateBrainrots().then(r => console.log('Synced', r.count, 'brainrots'));"
+```
 
 ## Documentation Files
 
+### Current Status & Planning
+- `SESSION_STATUS.md` - **START HERE** - Current implementation status, services status, and next steps
+- `CLAUDE.md` - This file - Development guide for Claude Code
+- `PHASE7_PLAN.md` - Detailed Phase 7 roadmap (UI/UX polish & advanced features)
+- `PHASE7_SESSION1_SUMMARY.md` - Phase 7 Session 1 completion summary
+
+### Project Documentation
 - `README.md` - Project overview and quick start
 - `SETUP.md` - Detailed setup instructions
 - `QUICK_START.md` - 5-minute quick start guide
-- `SESSION_STATUS.md` - Current implementation status and next steps
 - `PDR.md` - Product Design Report with requirements
 - `PLAN.md` - Development plan with phases
 - `TASKS.md` - Detailed task breakdown
 - `TODO.md` - Actionable checklist
+
+### Implementation Guides
 - `SCRAPING_STRATEGY.md` - Web scraping implementation strategy
+- `INTEGRATION_GUIDE.md` - Badges API integration guide (deprecated)
+- `DEPLOYMENT.md` - Deployment guide
 - `DECISIONS.md` - Project decisions with rationale
-- `INTEGRATION_GUIDE.md` - Badges API integration guide
+- `docs/PAGE_ANALYSIS.md` - Roblox page structure analysis
+
+### Phase Summaries
 - `PHASE4_SUMMARY.md` - Phase 4 completion summary
 - `PHASE5_SUMMARY.md` - Phase 5 completion summary
 - `PHASE6_SUMMARY.md` - Phase 6 completion summary
-- `docs/PAGE_ANALYSIS.md` - Roblox page structure analysis
+- `PHASE7_SESSION1_SUMMARY.md` - Phase 7 Session 1 summary (detail modal)

@@ -57,7 +57,7 @@ function getRarityColor(rarity) {
   return rarityColors[rarity] || 'bg-purple-600';
 }
 
-export default function BrainrotCard({ brainrot, index = 0 }) {
+export default function BrainrotCard({ brainrot, index = 0, onClick, priority = false }) {
   const [imageError, setImageError] = useState(false);
 
   const imageUrl = brainrot.image_url || brainrot.imageUrl;
@@ -92,7 +92,18 @@ export default function BrainrotCard({ brainrot, index = 0 }) {
       animate="visible"
       whileHover="hover"
       transition={{ delay: index * 0.1 }}
-      className="bg-gray-800 rounded-lg overflow-hidden shadow-lg cursor-pointer group"
+      className="bg-gray-800 rounded-lg overflow-hidden shadow-lg cursor-pointer group relative"
+      onClick={() => onClick && onClick(brainrot)}
+      data-testid="brainrot-card"
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick && onClick(brainrot);
+        }
+      }}
+      aria-label={`View details for ${brainrot.name}`}
     >
       {/* Image Container */}
       <div className="relative w-full h-48 bg-gray-700 overflow-hidden">
@@ -102,8 +113,11 @@ export default function BrainrotCard({ brainrot, index = 0 }) {
               src={imageSrc}
               alt={brainrot.name}
               fill
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
               className="object-cover"
               onError={() => setImageError(true)}
+              priority={priority}
+              loading={priority ? 'eager' : 'lazy'}
               unoptimized
             />
           </motion.div>

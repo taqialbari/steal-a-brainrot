@@ -19,7 +19,7 @@ const containerVariants = {
   }
 };
 
-export default function BrainrotGrid({ brainrots, loading, error }) {
+export default function BrainrotGrid({ brainrots, loading, error, onCardClick }) {
   if (loading) {
     return <LoadingSkeleton />;
   }
@@ -52,6 +52,8 @@ export default function BrainrotGrid({ brainrots, loading, error }) {
           key={brainrot.id}
           brainrot={brainrot}
           index={index}
+          onClick={onCardClick}
+          priority={index < 6}
         />
       ))}
     </motion.div>

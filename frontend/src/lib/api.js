@@ -46,6 +46,12 @@ class ApiClient {
     return this.request(`/api/brainrots/${id}`);
   }
 
+  async searchBrainrots(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    const endpoint = `/api/brainrots/search${queryString ? `?${queryString}` : ''}`;
+    return this.request(endpoint);
+  }
+
   async getCategories() {
     return this.request('/api/categories');
   }
