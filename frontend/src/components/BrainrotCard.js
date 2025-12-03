@@ -6,7 +6,6 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import Image from 'next/image';
 import { useState } from 'react';
 
 const cardVariants = {
@@ -109,16 +108,12 @@ export default function BrainrotCard({ brainrot, index = 0, onClick, priority = 
       <div className="relative w-full h-48 bg-gray-700 overflow-hidden">
         {!imageError && isValidImage && imageSrc ? (
           <motion.div variants={imageVariants} className="w-full h-full">
-            <Image
+            <img
               src={imageSrc}
               alt={brainrot.name}
-              fill
-              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-              className="object-cover"
+              className="w-full h-full object-cover"
               onError={() => setImageError(true)}
-              priority={priority}
               loading={priority ? 'eager' : 'lazy'}
-              unoptimized
             />
           </motion.div>
         ) : (

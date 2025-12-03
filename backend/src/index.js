@@ -29,7 +29,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // Serve static files (images)
 const path = require('path');
-const imagesDir = path.join(__dirname, 'images');
+// Images are mounted at /app/images in Docker
+const imagesDir = path.join(__dirname, '..', 'images');
 app.use('/images', express.static(imagesDir));
 
 // Health check endpoint
